@@ -861,9 +861,9 @@ export const OceanSkyBackground: React.FC = () => {
     // Use capture: true so scroll events from internal div.overflow-y-auto containers are caught!
     window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
 
-    // 2. Wheel Listener: Active only in Full Ocean View mode (Option A)
+    // 2. Wheel Listener: Forward margin/background wheel scrolling to active scroll container
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey || !isCinematicRef.current) return;
+      if (e.ctrlKey || e.metaKey) return;
 
       const target = e.target as HTMLElement | null;
       // If hovering directly over deck.gl 3D map canvas, let DeckGL handle zooming unless user holds Shift or Alt
@@ -889,7 +889,7 @@ export const OceanSkyBackground: React.FC = () => {
       }
 
       if (scrollContainer) {
-        // Let the container scroll naturally; handleScroll captures and updates targetSmoothRef smoothly
+        // Let the container scroll naturally
         return;
       }
 
@@ -899,6 +899,9 @@ export const OceanSkyBackground: React.FC = () => {
         activeContainer.scrollTop += e.deltaY;
         return;
       }
+
+      // Only scrub procedural atmosphere if user has toggled Full Ocean View (cinematic mode)
+      if (!isCinematicRef.current) return;
 
       // Pure background / 3D map mode (no scrollable modal): smooth progressive scroll
       const delta = e.deltaY;

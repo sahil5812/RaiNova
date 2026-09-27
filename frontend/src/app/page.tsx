@@ -362,7 +362,7 @@ export default function Home() {
 
       {/* Main Viewport: Either Full Weather Portal Dashboard OR 3D Digital Twin Map */}
       {portalViewMode === "PORTAL" ? (
-        <div className="flex-1 relative w-full overflow-hidden bg-transparent">
+        <div className="flex-1 min-h-0 relative w-full overflow-hidden bg-transparent">
           <WeatherPortalView
             currentRainfallMmHr={simParams.rainfall_mm_hr}
             currentTideLevelM={simParams.tide_level_m}
