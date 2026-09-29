@@ -1000,35 +1000,7 @@ export const OceanSkyBackground: React.FC = () => {
 
 
 
-      {/* ── Authentic Scene Navigation Dots (Right Edge) ───────── */}
-      <div
-        id="scene_dots"
-        className="fixed right-6 sm:right-7 top-1/2 -translate-y-1/2 z-20 flex flex-col gap-2.5 pointer-events-auto"
-      >
-        {SCENE_NAMES.map((name, idx) => {
-          const isActive = idx === currentSceneIdx;
-          return (
-            <button
-              key={name}
-              type="button"
-              onClick={() => setScene(idx)}
-              className="relative group p-1 flex items-center justify-center cursor-pointer"
-              title={`${name}: ${SCENE_DESCS[idx]}`}
-            >
-              <div
-                className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${
-                  isActive
-                    ? "bg-[var(--fg-dotact)] scale-150 shadow-[0_0_8px_var(--fg-dotact)]"
-                    : "bg-[var(--fg-dot)] hover:scale-125 hover:bg-[var(--fg-dotact)]"
-                }`}
-              />
-              <span className="absolute right-6 px-2 py-0.5 rounded text-[10px] font-space-mono font-bold uppercase tracking-wider text-[var(--fg)] bg-black/70 backdrop-blur-md opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none border border-white/10 shadow-lg">
-                {name}
-              </span>
-            </button>
-          );
-        })}
-      </div>
+
       {/* Bottom typography overlay removed per user request to prevent card overlap */}
     </>
   );
