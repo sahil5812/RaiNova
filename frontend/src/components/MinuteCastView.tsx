@@ -132,8 +132,6 @@ const MinuteCastViewComponent: React.FC<MinuteCastViewProps> = ({
   // Filter: 'ALL' or 'RAIN_ONLY'
   const [filterRainOnly, setFilterRainOnly] = useState<boolean>(false);
 
-  // Radar Animation Loop State (Zero-CPU compositor-driven CSS animations)
-  const [isRadarPlaying, setIsRadarPlaying] = useState<boolean>(true);
 
   // Interactive Graph Scrubber (0 to 120 minutes)
   const [scrubberMinute, setScrubberMinute] = useState<number>(18);
@@ -620,134 +618,7 @@ const MinuteCastViewComponent: React.FC<MinuteCastViewProps> = ({
           </div>
         </div>
 
-        {/* CARD 2: MUMBAI WEATHER RADAR (Exact Match to Screenshot Image 2) */}
-        <div className="glass-panel rounded-3xl p-5 sm:p-6 border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1.5px_2px_rgba(255,255,255,0.7)] scroll-reveal">
-          <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
-            <div className="flex items-center gap-2">
-              <Radio className="w-4 h-4 text-cyan-400 animate-pulse" />
-              <span className="text-xs font-mono uppercase tracking-widest text-white font-bold glass-text-title">
-                {t("minuteCastTitle", "MUMBAI WEATHER RADAR")}
-              </span>
-            </div>
 
-            <button
-              type="button"
-              onClick={onOpenMap}
-              className="glass-button px-3 py-1 rounded-xl text-xs font-bold text-cyan-300 flex items-center gap-1.5 hover:text-white transition-all"
-              title="Open in full 3D Digital Twin Map"
-            >
-              <span>{t("twinMap", "Full 3D Twin")}</span>
-              <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Radar Map Frame with Live Simulation Radar Echoes */}
-          <div className="relative w-full h-64 sm:h-72 bg-slate-950 rounded-2xl overflow-hidden border border-white/15 shadow-inner">
-            {/* Background Simulated World/Regional Coastline Base */}
-            <div
-              className="absolute inset-0 opacity-40 bg-cover bg-center"
-              style={{
-                backgroundImage:
-                  "radial-gradient(circle at 45% 45%, rgba(6,182,212,0.15) 0%, transparent 60%), linear-gradient(to right, #091e3a 0%, #1e3a5f 100%)",
-              }}
-            />
-
-            {/* Doppler Radar Sweep Beam Line */}
-            <div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background: "conic-gradient(from 0deg at 50% 50%, rgba(6,182,212,0.3) 0deg, rgba(6,182,212,0) 50deg)",
-                animation: "radarSweep 4s linear infinite",
-                animationPlayState: isRadarPlaying ? "running" : "paused",
-              }}
-            />
-
-            {/* Radar Sweep Echo Blobs over Mumbai Coordinates */}
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="relative w-48 h-48 rounded-full border border-cyan-500/20 animate-ping" />
-              <div className="absolute w-32 h-32 rounded-full border border-cyan-400/30" />
-              <div className="absolute w-16 h-16 rounded-full border border-cyan-400/40" />
-
-              {/* Convective Rain Cell over Western Coast */}
-              {activeScenario !== "DRY" && (
-                <div className="absolute left-[38%] top-[40%] w-28 h-28 rounded-full bg-gradient-to-tr from-emerald-500/35 via-amber-500/45 to-red-500/50 blur-xl animate-pulse" />
-              )}
-            </div>
-
-            {/* Zoom Controls Top-Left */}
-            <div className="absolute top-3 left-3 flex flex-col gap-1 z-10">
-              <button
-                type="button"
-                className="glass-button p-1.5 rounded-lg text-slate-300 hover:text-white"
-                title="Zoom In"
-              >
-                <ZoomIn className="w-4 h-4" />
-              </button>
-              <button
-                type="button"
-                className="glass-button p-1.5 rounded-lg text-slate-300 hover:text-white"
-                title="Zoom Out"
-              >
-                <ZoomOut className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Radar Playback Loop Bar at Bottom */}
-            <div className="absolute bottom-3 inset-x-3 z-10 glass-panel p-2 rounded-xl flex items-center justify-between gap-3 text-xs">
-              <button
-                type="button"
-                onClick={() => setIsRadarPlaying(!isRadarPlaying)}
-                className="glass-button-primary p-1.5 rounded-lg text-white"
-                title={isRadarPlaying ? "Pause Radar Loop" : "Play Radar Loop"}
-              >
-                {isRadarPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-              </button>
-
-              <div className="flex-1 flex items-center gap-2">
-                <span className="text-[10px] font-mono text-slate-300 whitespace-nowrap">8:05 AM</span>
-                <div className="flex-1 relative h-2 bg-black/40 rounded-full overflow-hidden border border-white/10">
-                  <div
-                    style={{
-                      animation: "radarProgress 10s linear infinite",
-                      animationPlayState: isRadarPlaying ? "running" : "paused",
-                    }}
-                    className="h-full bg-gradient-to-r from-cyan-500 via-sky-400 to-blue-500 rounded-full"
-                  />
-                </div>
-                <span className="text-[10px] font-mono text-cyan-300 font-bold whitespace-nowrap">11:45 AM IST</span>
-              </div>
-
-              <button
-                type="button"
-                onClick={onOpenMap}
-                className="glass-button p-1.5 rounded-lg text-slate-300 hover:text-white"
-                title="Expand Full View"
-              >
-                <Maximize2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Radar Legend (Exact match to screenshot) */}
-          <div className="flex flex-wrap items-center justify-center gap-4 text-[11px] font-medium text-slate-300 pt-3.5 mt-2 border-t border-white/10">
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-2.5 rounded-sm bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500" />
-              <span>Rain</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-2.5 rounded-sm bg-blue-500" />
-              <span>Snow</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-2.5 rounded-sm bg-cyan-400" />
-              <span>Ice</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-4 h-2.5 rounded-sm bg-purple-500" />
-              <span>Mix</span>
-            </div>
-          </div>
-        </div>
 
         {/* CARD 2.5: 5-ZONE METROPOLITAN SPATIAL RADAR MESH (MUMBAI + THANE MMR) */}
         <div className="glass-panel rounded-3xl p-4 sm:p-5 border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.5)] space-y-3 scroll-reveal">
