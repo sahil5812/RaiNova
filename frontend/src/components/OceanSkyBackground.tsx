@@ -998,64 +998,7 @@ export const OceanSkyBackground: React.FC = () => {
         className="fixed inset-0 pointer-events-none -z-20 transition-opacity duration-500"
       />
 
-      {/* ── Authentic Corner HUD ─────────────────────────────── */}
-      <div
-        id="hud"
-        className="fixed inset-0 z-20 pointer-events-none p-6 sm:p-8 flex flex-col justify-between"
-      >
-        {/* Top Bar: Scene Name (Left) & Percent + Progress Bar + View Toggle (Right) */}
-        <div id="hud-top" className="flex items-start justify-between w-full">
-          <div>
-            <span
-              ref={sceneNameRef}
-              id="scene_name"
-              className="font-space-mono text-[11px] sm:text-[13px] tracking-[0.25em] uppercase text-[var(--fg-hud)] drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)] font-bold transition-colors duration-1000 select-none block"
-            >
-              {SCENE_NAMES[currentSceneIdx]}
-            </span>
-          </div>
 
-          <div className="flex flex-col items-end gap-1.5 pointer-events-auto select-none">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setIsCinematic((prev) => !prev)}
-                className="px-2.5 py-1 rounded-full text-[10px] font-space-mono font-bold tracking-wider uppercase border border-white/20 bg-black/40 hover:bg-black/60 text-[var(--fg-hud)] shadow-sm backdrop-blur-md transition-all cursor-pointer hover:scale-105"
-                title={isCinematic ? "Show Digital Twin Dashboard" : "Hide Dashboard for Pure Ocean View"}
-              >
-                {isCinematic ? "✦ TWIN DASHBOARD" : "✦ FULL OCEAN VIEW"}
-              </button>
-              <span
-                ref={hudPctRef}
-                id="hud_pct"
-                className="font-space-mono text-[11px] sm:text-[13px] tracking-[0.12em] text-[var(--fg-hud)] opacity-70 drop-shadow-[0_1px_8px_rgba(0,0,0,0.6)] transition-colors duration-1000"
-              >
-                000%
-              </span>
-            </div>
-
-            <div
-              id="prog_bar"
-              onClick={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-                targetSmoothRef.current = ratio;
-              }}
-              className="w-[120px] h-[2px] bg-white/15 relative overflow-hidden rounded-full cursor-pointer pointer-events-auto"
-              title="Click or drag to scrub atmosphere"
-            >
-              <div
-                ref={progFillRef}
-                id="prog_fill"
-                style={{ width: "0%" }}
-                className="absolute left-0 top-0 bottom-0 bg-[var(--fg-hud)] opacity-80 transition-all duration-75"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div id="hud-bottom" />
-      </div>
 
       {/* ── Authentic Scene Navigation Dots (Right Edge) ───────── */}
       <div
