@@ -97,18 +97,25 @@ body.cinematic-mode nav {
 
 /* Custom Scrollbars */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
-  background: #090d16;
+  background: rgba(9, 13, 22, 0.45);
+  border-radius: 6px;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1e293b;
-  border-radius: 4px;
+  background: rgba(148, 163, 184, 0.35);
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #334155;
+  background: rgba(56, 189, 248, 0.65);
+}
+
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.4) rgba(9, 13, 22, 0.45);
 }
 
 /* ==========================================================================

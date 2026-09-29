@@ -75,9 +75,29 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = 0;
-      scrollContainerRef.current.dispatchEvent(new Event("scroll", { bubbles: true }));
+    if (!scrollContainerRef.current) return;
+    
+    // Smoothly scroll to the requested section
+    if (activeTab === "HOURLY") {
+      const el = document.getElementById("section-hourly");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    } else if (activeTab === "10-DAY") {
+      const el = document.getElementById("section-10day");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    } else if (activeTab === "RADAR") {
+      const el = document.getElementById("section-radar");
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    } else if (activeTab === "TODAY") {
+      scrollContainerRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
   }, [activeTab]);
 
@@ -278,13 +298,14 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
   return (
     <div
       ref={scrollContainerRef}
-      className="w-full h-full overflow-y-auto bg-transparent text-slate-100 p-4 sm:p-6 font-sans select-none"
+      className="w-full h-full overflow-y-auto bg-transparent text-slate-100 p-4 sm:p-6 font-sans custom-scrollbar"
+      style={{ scrollBehavior: "smooth" }}
     >
-      <div className="max-w-4xl mx-auto space-y-4 pb-16">
+      <div className="max-w-4xl mx-auto space-y-4 pb-28">
         
         {/* CARD 1: TONIGHT'S WEATHER & ALERTS (Frosted Acrylic) */}
         {(activeTab === "TODAY" || !activeTab) && (
-        <div className="glass-panel rounded-3xl p-5 sm:p-6 scroll-reveal">
+        <div id="section-today" className="glass-panel rounded-3xl p-5 sm:p-6 scroll-reveal">
           <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-3">
             <span className="text-[11px] font-mono uppercase tracking-widest text-slate-300 font-bold glass-text-title">
               {t("tonightAlertTitle", "TONIGHT'S WEATHER & HYDROLOGY ALERT")}
@@ -315,8 +336,8 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
         )}
 
         {/* CARD 2: CURRENT WEATHER & HYDROLOGICAL METRICS (Frosted Acrylic) */}
-        {(activeTab === "TODAY" || activeTab === "HOURLY" || activeTab === "RADAR" || !activeTab) && (
-        <div className="glass-panel rounded-3xl p-5 sm:p-6 scroll-reveal">
+        {(activeTab === "TODAY" || activeTab === "HOURLY" || activeTab === "10-DAY" || activeTab === "RADAR" || !activeTab) && (
+        <div id="section-current" className="glass-panel rounded-3xl p-5 sm:p-6 scroll-reveal">
           <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
             <span className="text-[11px] font-mono uppercase tracking-widest text-slate-300 font-bold glass-text-title">
               {t("currentTelemetryTitle", "CURRENT WEATHER & TELEMETRY")}
@@ -408,8 +429,8 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
         )}
 
         {/* CARD 3: LOOKING AHEAD ADVISORY BANNER (Frosted Amber Glass) */}
-        {(activeTab === "TODAY" || !activeTab) && (
-        <div className="glass-panel rounded-3xl p-4 sm:p-5 border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-slate-950/40 to-slate-950/50 flex items-center justify-between gap-4 scroll-reveal">
+        {(activeTab === "TODAY" || activeTab === "HOURLY" || !activeTab) && (
+        <div id="section-advisory" className="glass-panel rounded-3xl p-4 sm:p-5 border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-slate-950/40 to-slate-950/50 flex items-center justify-between gap-4 scroll-reveal">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/40 shrink-0 backdrop-blur-xl shadow-[0_0_12px_rgba(245,158,11,0.2)]">
               <ShieldAlert className="w-5 h-5" />
@@ -436,7 +457,7 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
 
         {/* CARD 4: MUMBAI & THANE WEATHER RADAR PREVIEW (Frosted Acrylic) */}
         {(activeTab === "TODAY" || activeTab === "RADAR" || !activeTab) && (
-        <div className="glass-panel rounded-3xl p-5 sm:p-6 overflow-hidden scroll-reveal">
+        <div id="section-radar" className="glass-panel rounded-3xl p-5 sm:p-6 overflow-hidden scroll-reveal">
           <div className="flex items-center justify-between border-b border-white/10 pb-3 mb-4">
             <div className="flex items-center gap-2">
               <span className="text-[11px] font-mono uppercase tracking-widest text-slate-300 font-bold glass-text-title">
@@ -530,9 +551,12 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
         )}
 
         {/* CARD 5: HOURLY WEATHER & HYDROLOGY EXPANDABLE LIST (AccuWeather Inspired) */}
-        {activeTab === "HOURLY" && (
+        {(activeTab === "TODAY" || activeTab === "HOURLY") && (
         <div
-          className="glass-panel rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1.5px_2px_rgba(255,255,255,0.7)] transition-all duration-500 scroll-reveal ring-2 ring-cyan-400/80 shadow-[0_0_30px_rgba(6,182,212,0.3)]"
+          id="section-hourly"
+          className={`glass-panel rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1.5px_2px_rgba(255,255,255,0.7)] transition-all duration-500 scroll-reveal ${
+            activeTab === "HOURLY" ? "ring-2 ring-cyan-400/80 shadow-[0_0_30px_rgba(6,182,212,0.3)]" : ""
+          }`}
         >
           {/* Section Header */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3 mb-4">
@@ -831,9 +855,12 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
         )}
 
         {/* CARD 6: 10-DAY SYNOPTIC WEATHER & ARABIAN SEA TIDAL FORECAST (Inspired by AccuWeather Screenshots) */}
-        {activeTab === "10-DAY" && (
+        {(activeTab === "TODAY" || activeTab === "10-DAY") && (
         <div
-          className="glass-panel rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1.5px_2px_rgba(255,255,255,0.7)] transition-all duration-500 scroll-reveal ring-2 ring-amber-400/80 shadow-[0_0_30px_rgba(245,158,11,0.3)]"
+          id="section-10day"
+          className={`glass-panel rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1.5px_2px_rgba(255,255,255,0.7)] transition-all duration-500 scroll-reveal ${
+            activeTab === "10-DAY" ? "ring-2 ring-amber-400/80 shadow-[0_0_30px_rgba(245,158,11,0.3)]" : ""
+          }`}
         >
           {/* Section Header */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-3 mb-4">
@@ -956,8 +983,8 @@ const WeatherPortalViewComponent: React.FC<WeatherPortalViewProps> = ({
         )}
 
         {/* CARD 7: SUN, MOON & ASTRONOMICAL SPRING TIDE (Frosted Acrylic) */}
-        {(activeTab === "TODAY" || activeTab === "10-DAY" || !activeTab) && (
-        <div className="glass-panel rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1.5px_2px_rgba(255,255,255,0.7)] scroll-reveal">
+        {(activeTab === "TODAY" || activeTab === "HOURLY" || activeTab === "10-DAY" || !activeTab) && (
+        <div id="section-astronomy" className="glass-panel rounded-3xl p-5 sm:p-6 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1.5px_2px_rgba(255,255,255,0.7)] scroll-reveal">
           <div className="border-b border-white/10 pb-3 mb-3">
             <span className="text-[11px] font-mono uppercase tracking-widest text-slate-300 font-bold glass-text-title">
               {language === 'hi' ? 'सूर्य, चंद्र एवं तटीय खगोलीय ज्वार-भाटा' : language === 'mr' ? 'सूर्य, चंद्र आणि किनारी खगोलीय भरती-ओहोटी' : 'SUN, MOON & COASTAL ASTRONOMICAL TIDES'}

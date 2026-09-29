@@ -861,9 +861,9 @@ export const OceanSkyBackground: React.FC = () => {
     // Use capture: true so scroll events from internal div.overflow-y-auto containers are caught!
     window.addEventListener("scroll", handleScroll, { capture: true, passive: true });
 
-    // 2. Wheel Listener: Active only in Full Ocean View mode (Option A)
+    // 2. Wheel Listener: Forward scroll events to active scrollable modal/dashboard
     const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey || !isCinematicRef.current) return;
+      if (e.ctrlKey || e.metaKey) return;
 
       const target = e.target as HTMLElement | null;
       // If hovering directly over deck.gl 3D map canvas, let DeckGL handle zooming unless user holds Shift or Alt
@@ -899,11 +899,6 @@ export const OceanSkyBackground: React.FC = () => {
         activeContainer.scrollTop += e.deltaY;
         return;
       }
-
-      // Pure background / 3D map mode (no scrollable modal): smooth progressive scroll
-      const delta = e.deltaY;
-      const sensitivity = 0.0006;
-      targetSmoothRef.current = Math.max(0.0, Math.min(1.0, targetSmoothRef.current + delta * sensitivity));
     };
 
     window.addEventListener("wheel", handleWheel, { passive: true });

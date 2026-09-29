@@ -58,14 +58,21 @@ export const ScrollRevealInit: React.FC = () => {
       },
       {
         root: null, // Viewport
-        rootMargin: "0px 0px -40px 0px", // Trigger when slightly inside bottom edge
-        threshold: 0.08, // Trigger as soon as 8% of the card enters
+        rootMargin: "150px 0px 150px 0px", // Trigger comfortably before card enters viewport
+        threshold: 0.01,
       }
     );
 
     const observeElements = () => {
       const targets = document.querySelectorAll(".scroll-reveal:not(.is-revealed)");
-      targets.forEach((el) => observer.observe(el));
+      targets.forEach((el) => {
+        const rect = el.getBoundingClientRect();
+        if (rect.top < window.innerHeight + 150 && rect.bottom > -150) {
+          el.classList.add("is-revealed");
+        } else {
+          observer.observe(el);
+        }
+      });
     };
 
     // Initial pass on mount
