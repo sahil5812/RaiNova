@@ -35,7 +35,12 @@ const MobileLayout = dynamic(
 export default function Home() {
   const { t, language } = useLanguage();
   const [mounted, setMounted] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
 
   const [viewMode, setViewMode] = useState<"2D" | "3D">("3D");
   const [isGraphModalOpen, setIsGraphModalOpen] = useState(false);

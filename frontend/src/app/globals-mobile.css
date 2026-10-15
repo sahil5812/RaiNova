@@ -256,6 +256,9 @@
   background-color: var(--nm-bg);
   overflow: hidden;
   z-index: -1;
+  contain: strict;
+  transform: translateZ(0);
+  pointer-events: none;
 }
 
 /* Soft radial gradients — atmospheric depth */
@@ -307,9 +310,8 @@
 .nm-bottom-nav {
   background: var(--nm-surface);
   border-top: 1px solid var(--nm-border-light);
-  box-shadow: 0 -4px 20px rgba(166, 180, 200, 0.3), 0 -1px 0 rgba(255, 255, 255, 0.9);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 -4px 16px rgba(166, 180, 200, 0.25), 0 -1px 0 rgba(255, 255, 255, 0.9);
+  transform: translateZ(0);
 }
 
 .nm-nav-item {

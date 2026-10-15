@@ -680,6 +680,20 @@ const getMumbaiTimeRatio = (): number => {
 };
 
 export const OceanSkyBackground: React.FC = () => {
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window !== "undefined") {
+      return window.innerWidth < 768;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768);
+    check();
+    window.addEventListener("resize", check, { passive: true });
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const initialRatio = getMumbaiTimeRatio();
   const initialSceneIdx = Math.min(SCENE_NAMES.length - 1, Math.round(initialRatio * (SCENE_NAMES.length - 1)));
@@ -729,6 +743,11 @@ export const OceanSkyBackground: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    // If on mobile screen (< 768px), do NOT create WebGL context or run shader loop
+    if (typeof window !== "undefined" && window.innerWidth < 768) {
+      return;
+    }
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -975,6 +994,10 @@ export const OceanSkyBackground: React.FC = () => {
       gl.deleteBuffer(buf);
     };
   }, []);
+
+  if (isMobile) {
+    return null;
+  }
 
   return (
     <>
