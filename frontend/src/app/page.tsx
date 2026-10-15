@@ -27,10 +27,16 @@ const CitizenReportModal = dynamic(
   () => import("../components/CitizenReportModal").then((mod) => mod.CitizenReportModal),
   { ssr: false }
 );
+const MobileLayout = dynamic(
+  () => import("../components/mobile/MobileLayout").then((mod) => mod.MobileLayout),
+  { ssr: false }
+);
 
 export default function Home() {
   const { t, language } = useLanguage();
   const [mounted, setMounted] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
   const [viewMode, setViewMode] = useState<"2D" | "3D">("3D");
   const [isGraphModalOpen, setIsGraphModalOpen] = useState(false);
   const [isPriorityModalOpen, setIsPriorityModalOpen] = useState(false);
@@ -70,7 +76,24 @@ export default function Home() {
 
   useEffect(() => {
     setMounted(true);
+    // Mobile detection
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) {
+        document.body.classList.add("mobile-neu");
+      } else {
+        document.body.classList.remove("mobile-neu");
+      }
+    };
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => {
+      window.removeEventListener("resize", checkMobile);
+      document.body.classList.remove("mobile-neu");
+    };
   }, []);
+
 
   // Initial Load & Param Change Simulation
   const triggerSimulation = useCallback(async (params: SimulationRequest) => {
@@ -324,6 +347,20 @@ export default function Home() {
       <div className="h-screen w-screen bg-slate-950 flex items-center justify-center text-slate-400 font-mono text-xs select-none">
         INITIALIZING DIGITAL TWIN...
       </div>
+    );
+  }
+
+  // Mobile-First Neumorphic Experience for screens < 768px
+  if (isMobile) {
+    return (
+      <MobileLayout
+        simResult={simResult}
+        simParams={simParams}
+        liveTelemetry={liveTelemetry}
+        isLoading={isLoading}
+        onSimulateScenario={handleApplyPreset}
+        onTriggerSimulation={triggerSimulation}
+      />
     );
   }
 

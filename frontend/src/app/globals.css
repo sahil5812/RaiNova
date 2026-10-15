@@ -4,6 +4,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import "./globals-mobile.css";
 
 :root {
   --background: #0a0a0f;
@@ -233,5 +234,48 @@ body.cinematic-mode nav {
     transition: none !important;
   }
 }
+
+/* ==========================================================================
+   Google Maps Navigation Callouts & Pin Marker Overlays
+   ========================================================================== */
+
+.maplibregl-marker {
+  z-index: 35 !important;
+  pointer-events: auto !important;
+}
+
+.google-maps-callout {
+  position: relative;
+  background: #ffffff;
+  color: #1e293b;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28), 0 1px 3px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(203, 213, 225, 0.85);
+  padding: 5px 9px;
+  cursor: pointer;
+  user-select: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+
+.google-maps-callout:hover {
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.google-maps-callout::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-top: 6px solid #ffffff;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.15));
+}
+
 
 

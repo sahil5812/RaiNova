@@ -889,7 +889,7 @@ export const OceanSkyBackground: React.FC = () => {
       }
 
       if (scrollContainer) {
-        // Let the container scroll naturally; handleScroll captures and updates targetSmoothRef smoothly
+        // Let the container scroll naturally
         return;
       }
 

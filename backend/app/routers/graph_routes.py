@@ -173,6 +173,11 @@ def post_coordinate_safe_route(req: SafeRouteRequest):
         elif "KRL" in node_id or "Kurla" in name:
             depth_map["WL_KRL_01"] = round(calc_depth, 1)
     
-    # 3. Calculate route with coordinate enrichment
-    result = graph_engine.calculate_safe_route_with_coords(origin_node, dest_node, depth_map)
+    # 3. Calculate multi-route alternatives with real road network geometry and flood safety scoring
+    result = graph_engine.calculate_multi_safe_routes(
+        start_coord=req.start,
+        dest_coord=req.destination,
+        depth_map=depth_map,
+        hotspots_list=infra.get("hotspots", [])
+    )
     return result

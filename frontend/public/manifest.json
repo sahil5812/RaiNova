@@ -1,0 +1,22 @@
+{
+  "name": "RaiNOva — Mumbai Urban Flood Digital Twin",
+  "short_name": "RaiNOva",
+  "description": "Real-time AI/ML urban infrastructure disaster management twin for Mumbai",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EDF1F4",
+  "theme_color": "#0ea5e9",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

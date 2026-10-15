@@ -1,4 +1,4 @@
-import { SimulationRequest, SimulationResponse, CascadingGraphResponse, CitizenReportRequest, CitizenReportResponse, SafeRouteResponse, DEMGridResponse, CoordinateRouteResponse } from './types';
+import { SimulationRequest, SimulationResponse, CascadingGraphResponse, CitizenReportRequest, CitizenReportResponse, SafeRouteResponse, DEMGridResponse, CoordinateRouteResponse, EvaluatedRouteOption, CoordinateRouteSegment } from './types';
 
 const API_BASE = '/api';
 
@@ -217,55 +217,131 @@ function getCoordinateRouteFallback(
   rainfall: number
 ): CoordinateRouteResponse {
   const isHeavy = rainfall >= 80;
-  const midLng = (start[0] + destination[0]) / 2;
-  const midLat = (start[1] + destination[1]) / 2;
+  const midPt: [number, number] = [(start[0] + destination[0]) / 2, (start[1] + destination[1]) / 2];
+  const altPt: [number, number] = [midPt[0] - 0.015, midPt[1] + 0.005];
+
+  const route0Segments: CoordinateRouteSegment[] = [
+    {
+      path: [start, midPt],
+      from_node: "START_POINT",
+      to_node: "RD_WEH_01",
+      from_name: "Start Location",
+      to_name: "Western Express Highway Elevated Corridor",
+      distance_km: 7.2,
+      duration_min: isHeavy ? 14.0 : 10.0,
+      water_depth_cm: 0,
+      risk: 0.0,
+      risk_level: "LOW",
+      segment_status: "FLOOD_FREE",
+    },
+    {
+      path: [midPt, destination],
+      from_node: "RD_WEH_01",
+      to_node: "DEST_POINT",
+      from_name: "Western Express Highway",
+      to_name: "Destination Terminal",
+      distance_km: 7.5,
+      duration_min: isHeavy ? 15.0 : 11.0,
+      water_depth_cm: isHeavy ? 12 : 0,
+      risk: isHeavy ? 0.24 : 0.0,
+      risk_level: "LOW",
+      segment_status: "FLOOD_FREE",
+    },
+  ];
+
+  const route1Segments: CoordinateRouteSegment[] = [
+    {
+      path: [start, altPt],
+      from_node: "START_POINT",
+      to_node: "RD_SVR_02",
+      from_name: "Start Location",
+      to_name: "Swami Vivekanand (SV) Road Lowline",
+      distance_km: 6.5,
+      duration_min: isHeavy ? 22.0 : 11.0,
+      water_depth_cm: isHeavy ? 45 : 8,
+      risk: isHeavy ? 0.9 : 0.16,
+      risk_level: isHeavy ? "HIGH" : "LOW",
+      segment_status: isHeavy ? "SUBMERGED" : "FLOOD_FREE",
+    },
+    {
+      path: [altPt, destination],
+      from_node: "RD_SVR_02",
+      to_node: "DEST_POINT",
+      from_name: "SV Road (Near Milan Subway Bowl)",
+      to_name: "Destination Terminal",
+      distance_km: 6.8,
+      duration_min: isHeavy ? 26.0 : 12.0,
+      water_depth_cm: isHeavy ? 88 : 12,
+      risk: isHeavy ? 1.0 : 0.24,
+      risk_level: isHeavy ? "HIGH" : "LOW",
+      segment_status: isHeavy ? "SUBMERGED" : "FLOOD_FREE",
+    },
+  ];
+
+  const hazardsAvoided = isHeavy
+    ? [
+        { node_id: "WLS_MLN_03", name: "Milan Subway Basin", water_depth_cm: 92.4, lat: 19.0865, lng: 72.8395, reason: "Avoided 92.4cm submerged underpass" },
+        { node_id: "WLS_HND_01", name: "Hindmata Junction", water_depth_cm: 65.0, lat: 19.0095, lng: 72.8425, reason: "Avoided 65.0cm floodwater" },
+      ]
+    : [];
+
+  const routes: EvaluatedRouteOption[] = [
+    {
+      id: "route_0",
+      name: "Via Western Express Highway Elevated Corridor",
+      distance_km: 14.7,
+      duration_min: isHeavy ? 29.0 : 21.0,
+      base_duration_min: 21.0,
+      risk_score: isHeavy ? 0.12 : 0.05,
+      risk_level: "LOW",
+      max_flood_depth_cm: isHeavy ? 12.0 : 0.0,
+      flood_exposure_pct: 0.0,
+      is_impassable: false,
+      is_recommended: true,
+      rank_badge: "BEST SAFE ROUTE",
+      composite_cost: isHeavy ? 35.0 : 25.0,
+      full_path: [start, midPt, destination],
+      segments: route0Segments,
+      hazards_avoided: hazardsAvoided,
+      advisory: "Elevated expressway route completely bypasses low-lying flood basins.",
+    },
+    {
+      id: "route_1",
+      name: "Via Swami Vivekanand (SV) Road Low Corridor",
+      distance_km: 13.3,
+      duration_min: isHeavy ? 48.0 : 23.0,
+      base_duration_min: 23.0,
+      risk_score: isHeavy ? 0.95 : 0.2,
+      risk_level: isHeavy ? "HIGH" : "LOW",
+      max_flood_depth_cm: isHeavy ? 88.0 : 12.0,
+      flood_exposure_pct: isHeavy ? 65.0 : 5.0,
+      is_impassable: isHeavy,
+      is_recommended: false,
+      rank_badge: "ALTERNATIVE 1",
+      composite_cost: isHeavy ? 5200.0 : 28.0,
+      full_path: [start, altPt, destination],
+      segments: route1Segments,
+      hazards_avoided: [],
+      advisory: isHeavy ? "Warning: High water depth near Milan & Khar subways. Traffic impassable." : "Passable under light rain.",
+    },
+  ];
+
   return {
-    distance_km: 14.2,
-    duration_min: isHeavy ? 38.5 : 24.0,
-    risk_score: isHeavy ? 0.35 : 0.08,
-    risk_level: isHeavy ? "MEDIUM" : "LOW",
-    origin_node: "RD_MDR_01",
-    destination_node: "WLS_AND_04",
-    origin_name: "Marine Drive",
-    destination_name: "Andheri Subway",
-    is_flood_safe: true,
-    segments: [
-      {
-        path: [start, [midLng, midLat]],
-        from_node: "RD_MDR_01",
-        to_node: "RD_WEH_01",
-        from_name: "Marine Drive",
-        to_name: "Western Express Highway",
-        distance_km: 7.1,
-        duration_min: isHeavy ? 18.0 : 12.0,
-        water_depth_cm: 0,
-        risk: 0.0,
-        risk_level: "LOW",
-        segment_status: "FLOOD_FREE",
-      },
-      {
-        path: [[midLng, midLat], destination],
-        from_node: "RD_WEH_01",
-        to_node: "WLS_AND_04",
-        from_name: "Western Express Highway",
-        to_name: "Andheri Subway",
-        distance_km: 7.1,
-        duration_min: isHeavy ? 20.5 : 12.0,
-        water_depth_cm: isHeavy ? 22 : 0,
-        risk: isHeavy ? 0.44 : 0.0,
-        risk_level: isHeavy ? "MEDIUM" : "LOW",
-        segment_status: isHeavy ? "SLOW" : "FLOOD_FREE",
-      },
-    ],
-    hazards_avoided: isHeavy
-      ? [
-          { node_id: "WLS_MLN_03", name: "Milan Subway", water_depth_cm: 92.4, lat: 19.0865, lng: 72.8395 },
-          { node_id: "WLS_HND_01", name: "Hindmata Junction", water_depth_cm: 65.0, lat: 19.0095, lng: 72.8425 },
-        ]
-      : [],
-    advisory: isHeavy
-      ? "Take Western Express Highway Elevated Corridor. Avoid SV Road and Milan Subway."
-      : "Route is flood-free. Normal conditions.",
+    origin_name: "Selected Start Location",
+    destination_name: "Selected Destination",
+    origin_coord: start,
+    destination_coord: destination,
+    best_route_index: 0,
+    routes_count: routes.length,
+    routes,
+    distance_km: routes[0].distance_km,
+    duration_min: routes[0].duration_min,
+    risk_score: routes[0].risk_score,
+    risk_level: routes[0].risk_level,
+    segments: routes[0].segments,
+    hazards_avoided: routes[0].hazards_avoided,
+    advisory: routes[0].advisory,
+    is_flood_safe: !routes[0].is_impassable,
   };
 }
 

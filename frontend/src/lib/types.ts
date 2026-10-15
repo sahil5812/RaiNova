@@ -207,19 +207,46 @@ export interface CoordinateRouteHazard {
   water_depth_cm: number;
   lat: number;
   lng: number;
+  reason?: string;
 }
 
-export interface CoordinateRouteResponse {
+export interface EvaluatedRouteOption {
+  id: string;
+  name: string;
   distance_km: number;
   duration_min: number;
+  base_duration_min: number;
   risk_score: number;
   risk_level: "LOW" | "MEDIUM" | "HIGH";
-  origin_node: string;
-  destination_node: string;
-  origin_name: string;
-  destination_name: string;
-  is_flood_safe: boolean;
+  max_flood_depth_cm: number;
+  flood_exposure_pct: number;
+  is_impassable: boolean;
+  is_recommended: boolean;
+  rank_badge: string;
+  composite_cost: number;
+  full_path: [number, number][];
   segments: CoordinateRouteSegment[];
   hazards_avoided: CoordinateRouteHazard[];
   advisory: string;
 }
+
+export interface MultiRouteResponse {
+  origin_name: string;
+  destination_name: string;
+  origin_coord: [number, number];
+  destination_coord: [number, number];
+  best_route_index: number;
+  routes_count: number;
+  routes: EvaluatedRouteOption[];
+  // Backwards compatibility convenience fields:
+  distance_km?: number;
+  duration_min?: number;
+  risk_score?: number;
+  risk_level?: "LOW" | "MEDIUM" | "HIGH";
+  segments?: CoordinateRouteSegment[];
+  hazards_avoided?: CoordinateRouteHazard[];
+  advisory?: string;
+  is_flood_safe?: boolean;
+}
+
+export type CoordinateRouteResponse = MultiRouteResponse;

@@ -6,6 +6,7 @@ and computes flood-safe emergency alternative routes.
 
 import networkx as nx
 import math
+import httpx
 
 def _haversine_km(lon1, lat1, lon2, lat2):
     R = 6371.0
@@ -281,6 +282,241 @@ class MumbaiInfrastructureGraph:
             "segments": enriched_segments,
             "hazards_avoided": enriched_hazards,
             "advisory": base_result.get("fallback_advisory", "")
+        }
+
+    def calculate_multi_safe_routes(self, start_coord, dest_coord, depth_map=None, hotspots_list=None):
+        """
+        Google Maps-style multi-route generator with RaiNova flood safety scoring:
+        1. Queries real road network routing (OSRM) to get 2-4 alternative paths following actual streets.
+        2. Evaluates flood inundation depth & exposure on each route using RaiNova hydrodynamic flood engine.
+        3. Computes multi-factor Safe Route Score (travel time + distance + flood penalty).
+        4. Selects the BEST SAFE ROUTE and formats all alternatives with risk-colored segments.
+        5. Falls back to NetworkX Dijkstra if OSRM is offline.
+        """
+        start_lng, start_lat = float(start_coord[0]), float(start_coord[1])
+        dest_lng, dest_lat = float(dest_coord[0]), float(dest_coord[1])
+        depth_map = depth_map or {}
+        hotspots_list = hotspots_list or []
+
+        # Find nearest graph node labels for human-readable origin/destination names
+        origin_node, _, origin_data = self.find_nearest_road_node(start_lng, start_lat)
+        dest_node, _, dest_data = self.find_nearest_road_node(dest_lng, dest_lat)
+        origin_name = origin_data.get("label", "Selected Start Location") if origin_data else "Selected Start Location"
+        dest_name = dest_data.get("label", "Selected Destination") if dest_data else "Selected Destination"
+
+        osrm_routes = []
+        try:
+            url = f"http://router.project-osrm.org/route/v1/driving/{start_lng},{start_lat};{dest_lng},{dest_lat}?overview=full&geometries=geojson&alternatives=3&steps=true"
+            with httpx.Client(timeout=4.5) as client:
+                res = client.get(url)
+                if res.status_code == 200:
+                    data = res.json()
+                    osrm_routes = data.get("routes", [])
+        except Exception:
+            pass
+
+        # Filter flooded hotspots with depth >= 15 cm for spatial proximity analysis
+        flooded_spots = []
+        for h in hotspots_list:
+            hid = str(h.get("id", ""))
+            depth = depth_map.get(hid, float(h.get("water_depth_cm", 0.0)))
+            lat = float(h.get("latitude", 0.0))
+            lon = float(h.get("longitude", 0.0))
+            if depth >= 15.0 and lat > 0 and lon > 0:
+                flooded_spots.append({
+                    "id": hid,
+                    "name": h.get("name", hid),
+                    "depth": depth,
+                    "lat": lat,
+                    "lon": lon
+                })
+
+        evaluated_routes = []
+
+        if osrm_routes:
+            for r_idx, r in enumerate(osrm_routes):
+                coords = r.get("geometry", {}).get("coordinates", [])
+                if len(coords) < 2:
+                    continue
+
+                total_dist_km = round(r.get("distance", 0.0) / 1000.0, 2)
+                base_duration_min = round(r.get("duration", 0.0) / 60.0, 1)
+
+                # Derive descriptive route name from major road step names
+                legs = r.get("legs", [])
+                steps = legs[0].get("steps", []) if legs else []
+                road_names = [s.get("name") for s in steps if s.get("name") and len(s.get("name", "")) > 3]
+                unique_roads = list(dict.fromkeys(road_names))[:3]
+                route_via = f"Via {', '.join(unique_roads)}" if unique_roads else f"Route Option {r_idx + 1}"
+
+                # Spatial Flood Exposure Analysis along the route polyline
+                max_depth_cm = 0.0
+                flooded_points_count = 0
+                encountered_hazards = {}
+                bypassed_hazards = []
+
+                # Point-by-point depth evaluation
+                point_depths = []
+                for pt in coords:
+                    p_lon, p_lat = pt[0], pt[1]
+                    p_depth = 0.0
+                    for fs in flooded_spots:
+                        d_km = _haversine_km(p_lon, p_lat, fs["lon"], fs["lat"])
+                        if d_km <= 0.28:  # Within 280m of flooded hotspot
+                            if fs["depth"] > p_depth:
+                                p_depth = fs["depth"]
+                            encountered_hazards[fs["id"]] = fs
+                    point_depths.append(p_depth)
+                    if p_depth >= 15.0:
+                        flooded_points_count += 1
+                    if p_depth > max_depth_cm:
+                        max_depth_cm = p_depth
+
+                exposure_pct = round((flooded_points_count / len(coords)) * 100.0, 1) if coords else 0.0
+                is_impassable = max_depth_cm >= 40.0
+
+                # Determine hazards avoided (flooded spots with >=35cm that this route DID NOT cross)
+                for fs in flooded_spots:
+                    if fs["depth"] >= 35.0 and fs["id"] not in encountered_hazards:
+                        bypassed_hazards.append({
+                            "node_id": fs["id"],
+                            "name": fs["name"],
+                            "water_depth_cm": round(fs["depth"], 1),
+                            "lat": fs["lat"],
+                            "lng": fs["lon"],
+                            "reason": f"Safely bypassed {fs['name']} ({round(fs['depth'])}cm water)"
+                        })
+
+                # Chunk coordinates into risk-colored segments for Deck.gl rendering
+                segments = []
+                curr_chunk = [coords[0]]
+                curr_risk = "LOW" if point_depths[0] < 15.0 else ("MEDIUM" if point_depths[0] < 40.0 else "HIGH")
+                curr_max_d = point_depths[0]
+
+                for p_idx in range(1, len(coords)):
+                    pt = coords[p_idx]
+                    p_d = point_depths[p_idx]
+                    p_risk = "LOW" if p_d < 15.0 else ("MEDIUM" if p_d < 40.0 else "HIGH")
+
+                    if p_risk == curr_risk and len(curr_chunk) < 60:
+                        curr_chunk.append(pt)
+                        curr_max_d = max(curr_max_d, p_d)
+                    else:
+                        curr_chunk.append(pt)
+                        seg_dist = round(_haversine_km(curr_chunk[0][0], curr_chunk[0][1], curr_chunk[-1][0], curr_chunk[-1][1]), 2)
+                        segments.append({
+                            "path": curr_chunk,
+                            "from_name": f"Km {round(len(segments) * (total_dist_km / max(1, len(steps))), 1)}",
+                            "to_name": route_via,
+                            "distance_km": max(0.1, seg_dist),
+                            "duration_min": round(max(0.5, (seg_dist / max(1.0, total_dist_km)) * base_duration_min), 1),
+                            "water_depth_cm": round(curr_max_d, 1),
+                            "risk_level": curr_risk,
+                            "segment_status": "FLOOD_FREE" if curr_risk == "LOW" else ("SLOW" if curr_risk == "MEDIUM" else "SUBMERGED")
+                        })
+                        curr_chunk = [pt]
+                        curr_risk = p_risk
+                        curr_max_d = p_d
+
+                if len(curr_chunk) >= 2:
+                    seg_dist = round(_haversine_km(curr_chunk[0][0], curr_chunk[0][1], curr_chunk[-1][0], curr_chunk[-1][1]), 2)
+                    segments.append({
+                        "path": curr_chunk,
+                        "from_name": "Final Approach",
+                        "to_name": dest_name,
+                        "distance_km": max(0.1, seg_dist),
+                        "duration_min": round(max(0.5, (seg_dist / max(1.0, total_dist_km)) * base_duration_min), 1),
+                        "water_depth_cm": round(curr_max_d, 1),
+                        "risk_level": curr_risk,
+                        "segment_status": "FLOOD_FREE" if curr_risk == "LOW" else ("SLOW" if curr_risk == "MEDIUM" else "SUBMERGED")
+                    })
+
+                # Safe Route Cost Scoring Formula
+                flood_penalty = (exposure_pct * 25.0) + (max_depth_cm * 1.5) + (5000.0 if is_impassable else 0.0)
+                travel_time_with_traffic = base_duration_min * (1.0 + (exposure_pct / 50.0))
+                composite_safe_score = travel_time_with_traffic + (total_dist_km * 0.4) + flood_penalty
+
+                if max_depth_cm >= 40.0:
+                    overall_risk = "HIGH"
+                elif max_depth_cm >= 15.0 or exposure_pct > 15.0:
+                    overall_risk = "MEDIUM"
+                else:
+                    overall_risk = "LOW"
+
+                evaluated_routes.append({
+                    "id": f"route_{r_idx}",
+                    "name": route_via,
+                    "distance_km": total_dist_km,
+                    "duration_min": round(travel_time_with_traffic, 1),
+                    "base_duration_min": base_duration_min,
+                    "risk_score": round(min(1.0, (max_depth_cm / 50.0) * 0.7 + (exposure_pct / 100.0) * 0.3), 2),
+                    "risk_level": overall_risk,
+                    "max_flood_depth_cm": round(max_depth_cm, 1),
+                    "flood_exposure_pct": exposure_pct,
+                    "is_impassable": is_impassable,
+                    "composite_cost": round(composite_safe_score, 1),
+                    "full_path": coords,
+                    "segments": segments,
+                    "hazards_avoided": bypassed_hazards[:4],
+                    "advisory": "Impassable: High flood water detected on this corridor." if is_impassable else (
+                        "Moderate waterlogging: Expect traffic slowdown." if overall_risk == "MEDIUM" else "Corridor is flood-safe and fully passable."
+                    )
+                })
+
+        # If OSRM failed or returned no routes, use Dijkstra fallback
+        if not evaluated_routes:
+            dijkstra_res = self.calculate_safe_route_with_coords(origin_node, dest_node, depth_map)
+            d_segs = dijkstra_res.get("segments", [])
+            d_path = []
+            for s in d_segs:
+                d_path.extend(s.get("path", []))
+            if not d_path:
+                d_path = [start_coord, dest_coord]
+
+            evaluated_routes.append({
+                "id": "route_0",
+                "name": f"Via {origin_name} to {dest_name}",
+                "distance_km": dijkstra_res.get("distance_km", 14.2),
+                "duration_min": dijkstra_res.get("duration_min", 25.0),
+                "base_duration_min": dijkstra_res.get("duration_min", 25.0),
+                "risk_score": dijkstra_res.get("risk_score", 0.1),
+                "risk_level": dijkstra_res.get("risk_level", "LOW"),
+                "max_flood_depth_cm": 0.0,
+                "flood_exposure_pct": 0.0,
+                "is_impassable": False,
+                "composite_cost": dijkstra_res.get("duration_min", 25.0),
+                "full_path": d_path,
+                "segments": d_segs if d_segs else [{
+                    "path": [start_coord, dest_coord],
+                    "from_name": origin_name,
+                    "to_name": dest_name,
+                    "distance_km": 14.2,
+                    "duration_min": 25.0,
+                    "water_depth_cm": 0.0,
+                    "risk_level": "LOW",
+                    "segment_status": "FLOOD_FREE"
+                }],
+                "hazards_avoided": dijkstra_res.get("hazards_avoided", []),
+                "advisory": dijkstra_res.get("advisory", "Dijkstra safe routing corridor active.")
+            })
+
+        # Rank all evaluated routes by composite_cost (lowest cost is BEST SAFE ROUTE)
+        evaluated_routes.sort(key=lambda x: x["composite_cost"])
+        for idx, r in enumerate(evaluated_routes):
+            r["is_recommended"] = (idx == 0)
+            if idx == 0:
+                r["rank_badge"] = "BEST SAFE ROUTE"
+            else:
+                r["rank_badge"] = f"ALTERNATIVE {idx}"
+
+        return {
+            "origin_name": origin_name,
+            "destination_name": dest_name,
+            "origin_coord": start_coord,
+            "destination_coord": dest_coord,
+            "best_route_index": 0,
+            "routes_count": len(evaluated_routes),
+            "routes": evaluated_routes
         }
 
     def get_graph_dict(self):

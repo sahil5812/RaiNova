@@ -39,3 +39,9 @@ env/
 Thumbs.db
 .agent/
 .planning/
+
+# Android Build & Keystores
+android/build/intermediates/
+*.keystore
+*.jks
+

@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect, useRef } from "react";
 import DeckGL from "@deck.gl/react";
 import { ScatterplotLayer, ArcLayer, PathLayer, TextLayer, GeoJsonLayer } from "@deck.gl/layers";
-import MapGL, { NavigationControl } from "react-map-gl/maplibre";
+import MapGL, { NavigationControl, Marker } from "react-map-gl/maplibre";
 import * as maplibregl from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { ComponentTelemetry, SafeRouteResponse, DEMGridResponse, CoordinateRouteResponse } from "../lib/types";
@@ -151,6 +151,7 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
   const [coordRouteResult, setCoordRouteResult] = useState<CoordinateRouteResponse | null>(null);
   const [isCoordRouteCalculating, setIsCoordRouteCalculating] = useState<boolean>(false);
   const [routeInputMode, setRouteInputMode] = useState<"CLICK" | "PRESET">("CLICK");
+  const [selectedRouteIndex, setSelectedRouteIndex] = useState<number>(0);
 
   // Citizen Ground Reports State
   const [citizenReports, setCitizenReports] = useState<CitizenReportRecord[]>([]);
@@ -226,7 +227,25 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
         tide_level_m
       );
       setCoordRouteResult(res);
+      setSelectedRouteIndex(res.best_route_index ?? 0);
       setShowSafeRoute(true);
+
+      // Smoothly pan & frame camera on the calculated route
+      if (routeStartCoord && routeEndCoord) {
+        const centerLng = (routeStartCoord[0] + routeEndCoord[0]) / 2;
+        const centerLat = (routeStartCoord[1] + routeEndCoord[1]) / 2;
+        const span = Math.max(
+          Math.abs(routeEndCoord[0] - routeStartCoord[0]),
+          Math.abs(routeEndCoord[1] - routeStartCoord[1])
+        );
+        const targetZoom = Math.min(13.5, Math.max(10.8, 13.6 - Math.log2(Math.max(span * 85, 1))));
+        setViewState((prev) => ({
+          ...prev,
+          longitude: centerLng,
+          latitude: centerLat,
+          zoom: targetZoom,
+        }));
+      }
     } catch (e) {
       console.error("Coordinate route calculation error:", e);
     } finally {
@@ -253,6 +272,7 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
     setRouteStartCoord(null);
     setRouteEndCoord(null);
     setCoordRouteResult(null);
+    setSelectedRouteIndex(0);
     setRouteSelectMode("none");
   };
 
@@ -902,11 +922,49 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
     });
   }, [showSafeRoute, safeRouteResult]);
 
-  // 10b. Coordinate-Based Risk-Colored Route Segments
-  const coordRouteSegmentsLayer = useMemo(() => {
-    if (!showSafeRoute || !coordRouteResult?.segments?.length) return null;
+  // 10b-alt. Alternative Candidate Routes Layer (Google Maps Soft Cornflower Blue, Clickable to Switch)
+  const coordAltRoutesLayer = useMemo(() => {
+    if (!showSafeRoute || !coordRouteResult?.routes?.length) return null;
 
-    const segmentData = coordRouteResult.segments.map((seg, idx) => ({
+    const altRoutes = coordRouteResult.routes
+      .map((r, idx) => ({ ...r, routeIndex: idx }))
+      .filter((r) => r.routeIndex !== selectedRouteIndex && r.full_path?.length > 1);
+
+    if (!altRoutes.length) return null;
+
+    return new PathLayer({
+      id: `coord-alt-routes-${selectedRouteIndex}`,
+      data: altRoutes,
+      getPath: (d: any) => d.full_path,
+      getColor: [125, 170, 245, 215], // Google Maps Alternate Route: Soft Cornflower Blue
+      getWidth: 30,
+      widthMinPixels: 5,
+      widthMaxPixels: 10,
+      capRounded: true,
+      jointRounded: true,
+      pickable: true,
+      autoHighlight: true,
+      highlightColor: [59, 130, 246, 240],
+      onClick: ({ object }: any) => {
+        if (object && typeof object.routeIndex === "number") {
+          setSelectedRouteIndex(object.routeIndex);
+        }
+      },
+    });
+  }, [showSafeRoute, coordRouteResult, selectedRouteIndex]);
+
+  // 10b. Active / Selected Route Segments (Google Maps Royal Blue for Safe, Amber/Red for Hazards)
+  const coordRouteSegmentsLayer = useMemo(() => {
+    if (!showSafeRoute || !coordRouteResult) return null;
+
+    const activeRoute = coordRouteResult.routes?.[selectedRouteIndex] || {
+      segments: coordRouteResult.segments || [],
+      full_path: []
+    };
+
+    if (!activeRoute.segments?.length) return null;
+
+    const segmentData = activeRoute.segments.map((seg, idx) => ({
       path: seg.path,
       name: `${seg.from_name} → ${seg.to_name}`,
       riskLevel: seg.risk_level,
@@ -915,55 +973,40 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
     }));
 
     return new PathLayer({
-      id: "coord-route-risk-segments",
+      id: `coord-route-active-${selectedRouteIndex}`,
       data: segmentData,
       getPath: (d: any) => d.path,
       getColor: (d: any) => {
-        if (d.riskLevel === "HIGH") return [239, 68, 68, 255];    // Red
-        if (d.riskLevel === "MEDIUM") return [245, 158, 11, 255]; // Amber
-        return [16, 185, 129, 255];                                // Emerald
+        if (d.riskLevel === "HIGH") return [239, 68, 68, 255];    // Crimson Red (Submerged / Impassable)
+        if (d.riskLevel === "MEDIUM") return [245, 158, 11, 255]; // Amber Orange (Moderate / Slowdown)
+        return [37, 99, 235, 255];                                // Google Maps Royal Blue (Safe Highway)
       },
-      getWidth: 55,
-      widthMinPixels: 7,
-      widthMaxPixels: 16,
+      getWidth: 48,
+      widthMinPixels: 6.5,
+      widthMaxPixels: 14,
       capRounded: true,
       jointRounded: true,
       pickable: true,
       autoHighlight: true,
       highlightColor: [255, 255, 255, 180],
     });
-  }, [showSafeRoute, coordRouteResult]);
+  }, [showSafeRoute, coordRouteResult, selectedRouteIndex]);
 
-  // 10c. Route Start/Destination Pin Markers
+  // 10c. Route Start/Destination Pin Markers (Rendered via high-res MapLibre Marker components)
   const routePinMarkersLayer = useMemo(() => {
-    const pins: { coord: [number, number]; type: "start" | "destination" }[] = [];
-    if (routeStartCoord) pins.push({ coord: routeStartCoord, type: "start" });
-    if (routeEndCoord) pins.push({ coord: routeEndCoord, type: "destination" });
-    if (!pins.length) return null;
-
-    return new ScatterplotLayer({
-      id: "route-pin-markers",
-      data: pins,
-      getPosition: (d: any) => d.coord,
-      getRadius: 400,
-      radiusMinPixels: 10,
-      radiusMaxPixels: 22,
-      getFillColor: (d: any) => d.type === "start" ? [59, 130, 246, 255] : [16, 185, 129, 255],
-      getLineColor: [255, 255, 255, 255],
-      lineWidthMinPixels: 3,
-      stroked: true,
-      filled: true,
-      pickable: true,
-    });
-  }, [routeStartCoord, routeEndCoord]);
+    return null;
+  }, []);
 
   // 10d. Coordinate Route Avoided Hazard Markers
   const coordHazardsLayer = useMemo(() => {
-    if (!showSafeRoute || !coordRouteResult?.hazards_avoided?.length) return null;
+    if (!showSafeRoute || !coordRouteResult) return null;
+    const activeRoute = coordRouteResult.routes?.[selectedRouteIndex];
+    const hazards = activeRoute?.hazards_avoided || coordRouteResult.hazards_avoided;
+    if (!hazards?.length) return null;
 
     return new ScatterplotLayer({
-      id: "coord-route-hazards",
-      data: coordRouteResult.hazards_avoided,
+      id: `coord-route-hazards-${selectedRouteIndex}`,
+      data: hazards,
       getPosition: (d: any) => [d.lng, d.lat],
       getRadius: 380,
       radiusMinPixels: 12,
@@ -975,7 +1018,7 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
       filled: true,
       pickable: true,
     });
-  }, [showSafeRoute, coordRouteResult]);
+  }, [showSafeRoute, coordRouteResult, selectedRouteIndex]);
 
   // 11. 2D DEM Surface Runoff Flow Grid Layer
   const demGridLayer = useMemo(() => {
@@ -1070,6 +1113,7 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
         safeRouteLayer,
         safeRouteWaypointsLayer,
         avoidedHazardsLayer,
+        coordAltRoutesLayer,
         coordRouteSegmentsLayer,
         coordHazardsLayer,
         routePinMarkersLayer,
@@ -1089,6 +1133,7 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
       safeRouteLayer,
       safeRouteWaypointsLayer,
       avoidedHazardsLayer,
+      coordAltRoutesLayer,
       coordRouteSegmentsLayer,
       coordHazardsLayer,
       routePinMarkersLayer,
@@ -1236,6 +1281,134 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
           attributionControl={false}
         >
           <NavigationControl position="bottom-right" showCompass={true} showZoom={true} />
+
+          {/* Start Location Pin: Circular white disc with vibrant blue inner dot */}
+          {routeStartCoord && (
+            <Marker
+              longitude={routeStartCoord[0]}
+              latitude={routeStartCoord[1]}
+              anchor="center"
+              style={{ zIndex: 40 }}
+            >
+              <div className="relative flex flex-col items-center pointer-events-auto">
+                <div className="w-5 h-5 rounded-full bg-white shadow-[0_2px_8px_rgba(0,0,0,0.4)] border border-slate-300 flex items-center justify-center">
+                  <div className="w-2.5 h-2.5 rounded-full bg-blue-600 shadow-sm" />
+                </div>
+                <div className="mt-1 px-1.5 py-0.2 bg-slate-900/90 text-white text-[9.5px] font-bold rounded shadow whitespace-nowrap border border-white/20">
+                  Start
+                </div>
+              </div>
+            </Marker>
+          )}
+
+          {/* Destination Pin Marker: Google Maps Red Teardrop Pin */}
+          {routeEndCoord && (
+            <Marker
+              longitude={routeEndCoord[0]}
+              latitude={routeEndCoord[1]}
+              anchor="bottom"
+              style={{ zIndex: 40 }}
+            >
+              <div className="relative flex flex-col items-center group cursor-pointer pointer-events-auto">
+                <svg
+                  width="28"
+                  height="36"
+                  viewBox="0 0 28 36"
+                  fill="none"
+                  className="drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)] transition-transform group-hover:scale-110"
+                >
+                  <path
+                    d="M14 0C6.268 0 0 6.268 0 14c0 10.5 14 22 14 22s14-11.5 14-22c0-7.732-6.268-14-14-14z"
+                    fill="#EA4335"
+                  />
+                  <circle cx="14" cy="13" r="5" fill="#7F1D1D" />
+                  <circle cx="14" cy="13" r="3.5" fill="#FFFFFF" />
+                </svg>
+                <div className="mt-0.5 px-2 py-0.5 rounded bg-red-950/90 border border-red-500/40 text-red-100 text-[9.5px] font-bold shadow whitespace-nowrap">
+                  Destination
+                </div>
+              </div>
+            </Marker>
+          )}
+
+          {/* Floating Google Maps Route Badges (Speech Bubbles with Time & Distance) */}
+          {showSafeRoute && coordRouteResult?.routes && coordRouteResult.routes.map((route, rIdx) => {
+            if (!route.full_path || route.full_path.length < 2) return null;
+            const isSelected = selectedRouteIndex === rIdx;
+            
+            // Stagger midpoint position along path so multiple route badges don't collide
+            const totalRoutes = coordRouteResult.routes!.length;
+            const sampleFactor = totalRoutes === 1 
+              ? 0.50 
+              : rIdx === 0 
+                ? 0.42 
+                : rIdx === 1 
+                  ? 0.58 
+                  : 0.70;
+            const sampleIdx = Math.min(
+              route.full_path.length - 1, 
+              Math.max(0, Math.floor(route.full_path.length * sampleFactor))
+            );
+            const badgeCoord = route.full_path[sampleIdx];
+            if (!badgeCoord) return null;
+
+            return (
+              <Marker
+                key={`route-badge-${rIdx}-${route.id || rIdx}`}
+                longitude={badgeCoord[0]}
+                latitude={badgeCoord[1]}
+                anchor="bottom"
+                style={{ zIndex: isSelected ? 45 : 35 }}
+                onClick={(e) => {
+                  e.originalEvent.stopPropagation();
+                  setSelectedRouteIndex(rIdx);
+                }}
+              >
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRouteIndex(rIdx);
+                  }}
+                  className={`google-maps-callout pointer-events-auto transition-all ${
+                    isSelected 
+                      ? "ring-2 ring-blue-600 shadow-[0_6px_20px_rgba(0,0,0,0.35)] scale-105" 
+                      : "opacity-90 hover:opacity-100 hover:scale-105"
+                  }`}
+                  title={isSelected ? "Active Selected Route" : "Click to select this route"}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs">🚗</span>
+                    <span className={`text-[12.5px] font-bold tracking-tight ${
+                      isSelected ? "text-slate-900" : "text-slate-700"
+                    }`}>
+                      {route.duration_min} min
+                    </span>
+                    {route.risk_level === "LOW" ? (
+                      <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 font-semibold ml-0.5">
+                        Safe
+                      </span>
+                    ) : route.risk_level === "MEDIUM" ? (
+                      <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 font-semibold ml-0.5">
+                        Caution
+                      </span>
+                    ) : (
+                      <span className="text-[9.5px] px-1.5 py-0.2 rounded bg-rose-100 text-rose-800 font-semibold ml-0.5">
+                        Flooded
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10.5px] font-medium text-slate-500 mt-0.5 flex items-center justify-between gap-2">
+                    <span>{route.distance_km} km</span>
+                    {isSelected ? (
+                      <span className="text-[9px] font-bold text-blue-600">Selected</span>
+                    ) : (
+                      <span className="text-[9px] text-slate-400">Click to select</span>
+                    )}
+                  </div>
+                </div>
+              </Marker>
+            );
+          })}
         </MapGL>
       </DeckGL>
 
@@ -1638,106 +1811,191 @@ const DeckGLMapViewComponent: React.FC<DeckGLMapViewProps> = ({
           </div>
 
           {/* ROUTE RESULT STATS & VISUALIZATION */}
-          {(coordRouteResult || safeRouteResult) && (
-            <div className="mt-1 flex flex-col gap-2.5 pt-2.5 border-t border-white/10 animate-fadeIn">
-              {/* Distance, Duration, Risk Cards */}
-              <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 border border-white/10 p-2 rounded-xl text-center">
-                <div>
-                  <div className="text-[9px] uppercase text-slate-400 font-medium">Distance</div>
-                  <div className="text-xs font-mono font-bold text-cyan-300">
-                    {coordRouteResult?.distance_km ?? 14.2} km
+          {(coordRouteResult || safeRouteResult) && (() => {
+            const activeRoute = coordRouteResult?.routes?.[selectedRouteIndex] || {
+              name: coordRouteResult?.origin_name ? `${coordRouteResult.origin_name} to ${coordRouteResult.destination_name}` : "Calculated Route",
+              distance_km: coordRouteResult?.distance_km ?? 14.2,
+              duration_min: coordRouteResult?.duration_min ?? safeRouteResult?.estimated_transit_time_mins ?? 24,
+              risk_level: coordRouteResult?.risk_level ?? "LOW",
+              risk_score: coordRouteResult?.risk_score ?? 0.1,
+              max_flood_depth_cm: 0,
+              is_impassable: false,
+              is_recommended: true,
+              segments: coordRouteResult?.segments ?? [],
+              hazards_avoided: coordRouteResult?.hazards_avoided ?? safeRouteResult?.submerged_hazards_avoided ?? [],
+              advisory: coordRouteResult?.advisory ?? safeRouteResult?.fallback_advisory ?? ""
+            };
+
+            return (
+              <div className="mt-1 flex flex-col gap-2.5 pt-2.5 border-t border-white/10 animate-fadeIn">
+                {/* Multi-Route Alternatives Selector Cards (Google Maps Style) */}
+                {coordRouteResult?.routes && coordRouteResult.routes.length > 1 && (
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-[10px] uppercase font-bold text-slate-400 flex items-center justify-between px-0.5">
+                      <span className="flex items-center gap-1">
+                        <Route className="w-3 h-3 text-cyan-400" />
+                        <span>Routes Found ({coordRouteResult.routes.length})</span>
+                      </span>
+                      <span className="text-[9px] text-cyan-400 font-mono">Select to compare</span>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      {coordRouteResult.routes.map((rOption, rIdx) => {
+                        const isSelected = selectedRouteIndex === rIdx;
+                        const isRiskHigh = rOption.risk_level === "HIGH";
+                        const isRiskMed = rOption.risk_level === "MEDIUM";
+                        return (
+                          <button
+                            key={rOption.id || rIdx}
+                            type="button"
+                            onClick={() => setSelectedRouteIndex(rIdx)}
+                            className={`w-full text-left p-2.5 rounded-xl border transition-all flex flex-col gap-1 ${
+                              isSelected
+                                ? "bg-slate-800/95 border-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.3)] ring-1 ring-emerald-400/50"
+                                : "bg-slate-900/60 hover:bg-slate-800/60 border-white/10 text-slate-300 opacity-80 hover:opacity-100"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-1.5 truncate max-w-[210px]">
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                                  isRiskHigh ? "bg-rose-500 shadow-[0_0_6px_rgba(244,63,94,0.8)]" : isRiskMed ? "bg-amber-500 shadow-[0_0_6px_rgba(245,158,11,0.8)]" : "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.8)]"
+                                }`} />
+                                <span className="font-bold text-xs truncate text-slate-100">{rOption.name}</span>
+                              </div>
+                              <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold uppercase tracking-wider ${
+                                rOption.is_recommended
+                                  ? "bg-emerald-500/25 text-emerald-300 border border-emerald-400/40"
+                                  : "bg-slate-800 text-slate-400 border border-white/10"
+                              }`}>
+                                {rOption.rank_badge}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center justify-between text-[10.5px] font-mono mt-0.5">
+                              <span className="text-cyan-300 font-bold">{rOption.distance_km} km</span>
+                              <span className="text-slate-200">{rOption.duration_min} min</span>
+                              <span className={`font-bold ${
+                                isRiskHigh ? "text-rose-400" : isRiskMed ? "text-amber-400" : "text-emerald-400"
+                              }`}>
+                                {isRiskHigh ? "HIGH RISK" : isRiskMed ? "MODERATE" : "LOW RISK"}
+                              </span>
+                            </div>
+
+                            {rOption.is_impassable && (
+                              <div className="text-[9.5px] text-rose-300 bg-rose-500/15 border border-rose-500/30 rounded px-1.5 py-0.5 mt-0.5 flex items-center gap-1 font-semibold">
+                                <AlertTriangle className="w-2.5 h-2.5 text-rose-400" />
+                                <span>Submerged Sections ({rOption.max_flood_depth_cm}cm water)</span>
+                              </div>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Route Detailed Cards */}
+                <div className="grid grid-cols-3 gap-1.5 bg-slate-900/90 border border-white/10 p-2 rounded-xl text-center">
+                  <div>
+                    <div className="text-[9px] uppercase text-slate-400 font-medium">Distance</div>
+                    <div className="text-xs font-mono font-bold text-cyan-300">
+                      {activeRoute.distance_km} km
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase text-slate-400 font-medium">Est. Time</div>
+                    <div className="text-xs font-mono font-bold text-slate-100">
+                      {activeRoute.duration_min} min
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[9px] uppercase text-slate-400 font-medium">Flood Risk</div>
+                    <div className={`text-xs font-mono font-bold ${
+                      activeRoute.risk_level === "HIGH"
+                        ? "text-rose-400"
+                        : activeRoute.risk_level === "MEDIUM"
+                        ? "text-amber-400"
+                        : "text-emerald-400"
+                    }`}>
+                      {activeRoute.risk_level}
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <div className="text-[9px] uppercase text-slate-400 font-medium">Est. Time</div>
-                  <div className="text-xs font-mono font-bold text-slate-100">
-                    {coordRouteResult?.duration_min ?? safeRouteResult?.estimated_transit_time_mins ?? 24} min
-                  </div>
-                </div>
-                <div>
-                  <div className="text-[9px] uppercase text-slate-400 font-medium">Flood Risk</div>
-                  <div className={`text-xs font-mono font-bold ${
-                    coordRouteResult?.risk_level === "HIGH"
-                      ? "text-rose-400"
-                      : coordRouteResult?.risk_level === "MEDIUM"
-                      ? "text-amber-400"
-                      : "text-emerald-400"
+
+                {/* Status Badge */}
+                <div className="flex items-center justify-between px-1">
+                  <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-md border ${
+                    activeRoute.is_recommended
+                      ? "text-emerald-300 bg-emerald-500/20 border-emerald-400/30"
+                      : "text-amber-300 bg-amber-500/20 border-amber-400/30"
                   }`}>
-                    {coordRouteResult?.risk_level ?? "LOW"}
+                    {activeRoute.is_recommended ? "🟢 RECOMMENDED SAFE ROUTE" : "🟡 ALTERNATIVE ROUTE"}
+                  </span>
+                  <div className="flex items-center gap-1 text-[11px] font-mono text-slate-200">
+                    <Clock className="w-3 h-3 text-cyan-400" />
+                    <span>{activeRoute.duration_min} mins</span>
                   </div>
                 </div>
-              </div>
 
-              {/* Status Badge */}
-              <div className="flex items-center justify-between px-1">
-                <span className="text-[10px] font-mono text-emerald-300 font-bold bg-emerald-500/20 px-2 py-0.5 rounded-md border border-emerald-400/30">
-                  {coordRouteResult?.is_flood_safe ?? safeRouteResult?.is_flood_safe ? "🟢 FLOOD-SAFE CORRIDOR" : "🟡 DIVERTED ROUTE"}
-                </span>
-                <div className="flex items-center gap-1 text-[11px] font-mono text-slate-200">
-                  <Clock className="w-3 h-3 text-cyan-400" />
-                  <span>{coordRouteResult?.duration_min ?? safeRouteResult?.estimated_transit_time_mins} mins</span>
+                {/* Color Code Legend */}
+                <div className="flex items-center justify-between text-[9px] px-1 text-slate-400 border-t border-white/5 pt-1.5">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> &lt;15cm Safe</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> 15-40cm Moderate</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" /> &gt;40cm Impassable</span>
                 </div>
-              </div>
 
-              {/* Color Code Legend */}
-              <div className="flex items-center justify-between text-[9px] px-1 text-slate-400 border-t border-white/5 pt-1.5">
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> &lt;15cm Safe</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500" /> 15-40cm Moderate</span>
-                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-rose-500" /> &gt;40cm Impassable</span>
-              </div>
-
-              {/* Segment Breakdown */}
-              {coordRouteResult?.segments && coordRouteResult.segments.length > 0 && (
-                <div className="max-h-36 overflow-y-auto flex flex-col gap-1 pr-1 custom-scrollbar">
-                  {coordRouteResult.segments.map((seg, i) => (
-                    <div
-                      key={i}
-                      className={`p-1.5 rounded-lg border text-[10px] flex items-center justify-between ${
-                        seg.risk_level === "HIGH"
-                          ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
-                          : seg.risk_level === "MEDIUM"
-                          ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
-                          : "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
-                      }`}
-                    >
-                      <div className="truncate max-w-[170px]">
-                        <span className="font-semibold">{seg.from_name}</span>
-                        <span className="text-slate-400 mx-1">→</span>
-                        <span className="font-semibold">{seg.to_name}</span>
+                {/* Segment Breakdown */}
+                {activeRoute.segments && activeRoute.segments.length > 0 && (
+                  <div className="max-h-36 overflow-y-auto flex flex-col gap-1 pr-1 custom-scrollbar">
+                    {activeRoute.segments.map((seg, i) => (
+                      <div
+                        key={i}
+                        className={`p-1.5 rounded-lg border text-[10px] flex items-center justify-between ${
+                          seg.risk_level === "HIGH"
+                            ? "bg-rose-500/10 border-rose-500/30 text-rose-200"
+                            : seg.risk_level === "MEDIUM"
+                            ? "bg-amber-500/10 border-amber-500/30 text-amber-200"
+                            : "bg-emerald-500/10 border-emerald-500/30 text-emerald-200"
+                        }`}
+                      >
+                        <div className="truncate max-w-[170px]">
+                          <span className="font-semibold">{seg.from_name}</span>
+                          <span className="text-slate-400 mx-1">→</span>
+                          <span className="font-semibold">{seg.to_name}</span>
+                        </div>
+                        <div className="font-mono text-[9px] text-right flex-shrink-0">
+                          <div>{seg.distance_km} km • {seg.duration_min}m</div>
+                          <div className="text-[8.5px] opacity-80">{seg.water_depth_cm} cm water</div>
+                        </div>
                       </div>
-                      <div className="font-mono text-[9px] text-right flex-shrink-0">
-                        <div>{seg.distance_km} km • {seg.duration_min}m</div>
-                        <div className="text-[8.5px] opacity-80">{seg.water_depth_cm} cm water</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Avoided Hazards */}
-              {((coordRouteResult?.hazards_avoided && coordRouteResult.hazards_avoided.length > 0) ||
-                (safeRouteResult?.submerged_hazards_avoided && safeRouteResult.submerged_hazards_avoided.length > 0)) && (
-                <div className="bg-red-500/15 border border-red-500/30 p-2.5 rounded-xl flex flex-col gap-1.5">
-                  <div className="flex items-center gap-1 text-[10.5px] font-bold text-red-400">
-                    <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
-                    <span>Avoided Submerged Hazards ({coordRouteResult?.hazards_avoided?.length ?? safeRouteResult?.submerged_hazards_avoided?.length})</span>
+                    ))}
                   </div>
-                  {(coordRouteResult?.hazards_avoided || safeRouteResult?.submerged_hazards_avoided || []).slice(0, 3).map((h: any, i: number) => (
-                    <div key={i} className="text-[10px] text-red-200">
-                      • {h.name}: <span className="font-mono text-amber-300">{Math.round(h.water_depth_cm)}cm water</span> (Bypassed)
-                    </div>
-                  ))}
-                </div>
-              )}
+                )}
 
-              {/* Advisory */}
-              {(coordRouteResult?.advisory || safeRouteResult?.fallback_advisory) && (
-                <p className="text-[10px] text-slate-300 italic px-1">
-                  Advisory: {coordRouteResult?.advisory || safeRouteResult?.fallback_advisory}
-                </p>
-              )}
-            </div>
-          )}
+                {/* Avoided Hazards */}
+                {activeRoute.hazards_avoided && activeRoute.hazards_avoided.length > 0 && (
+                  <div className="bg-red-500/15 border border-red-500/30 p-2.5 rounded-xl flex flex-col gap-1.5">
+                    <div className="flex items-center gap-1 text-[10.5px] font-bold text-red-400">
+                      <AlertTriangle className="w-3.5 h-3.5 text-red-400" />
+                      <span>Avoided Submerged Hazards ({activeRoute.hazards_avoided.length})</span>
+                    </div>
+                    {activeRoute.hazards_avoided.slice(0, 3).map((h: any, i: number) => (
+                      <div key={i} className="text-[10px] text-red-200">
+                        • {h.name}: <span className="font-mono text-amber-300">{Math.round(h.water_depth_cm)}cm water</span> (Bypassed)
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Advisory */}
+                {activeRoute.advisory && (
+                  <p className="text-[10px] text-slate-300 italic px-1">
+                    Advisory: {activeRoute.advisory}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
