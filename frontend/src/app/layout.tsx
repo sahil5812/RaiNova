@@ -1,9 +1,18 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Plus_Jakarta_Sans, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import OceanSkyBackground from "@/components/OceanSkyBackground";
 import { ScrollRevealInit } from "@/components/ScrollRevealInit";
 import { LanguageProvider } from "@/lib/i18n/LanguageContext";
+
+export const viewport: Viewport = {
+  themeColor: "#0ea5e9",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
+};
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
@@ -26,6 +35,7 @@ const spaceGrotesk = Space_Grotesk({
 export const metadata: Metadata = {
   title: "RaiNova — Mumbai Urban Infrastructure Digital Twin",
   description: "Real-time AI/ML urban infrastructure disaster management twin for Mumbai.",
+  manifest: "/manifest.json",
   icons: {
     icon: [
       { url: "/icon.svg", type: "image/svg+xml" },

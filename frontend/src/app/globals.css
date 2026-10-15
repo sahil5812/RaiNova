@@ -4,6 +4,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+@import "./globals-mobile.css";
 
 :root {
   --background: #0a0a0f;

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">RaiNOva</string>
+    <string name="default_url">http://192.168.0.102:3000</string>
+    <string name="fallback_url">https://mumbai-urban-digital-twin.onrender.com</string>
+    <string name="offline_title">Connection Unavailable</string>
+    <string name="offline_message">Unable to reach the RaiNOva Urban Twin server. Please ensure you are connected to the network and the server is running.</string>
+    <string name="retry_button">Retry Connection</string>
+    <string name="exit_prompt">Press back again to exit</string>
+</resources>
